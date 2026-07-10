@@ -779,7 +779,66 @@ sensor:
     filters:
       - multiply: 0.1
 
+globals:
+  - id: modbus_rw_register_address
+    type: uint16_t
+    restore_value: yes
+    initial_value: '0'
+  - id: modbus_rw_register_value
+    type: uint16_t
+    restore_value: yes
+    initial_value: '0'
+  - id: modbus_rw_use_holding_register
+    type: bool
+    restore_value: yes
+    initial_value: 'true'
+  - id: modbus_rw_read_32bit
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
+
+text_sensor:
+  - platform: template
+    name: Modbus Last Result
+    id: modbus_rw_last_result
+    icon: mdi:console-line
+    entity_category: diagnostic
+    update_interval: never
+
 number:
+  # Generic Modbus read/write controls for the ESPHome web UI. This mirrors the
+  # intent of OpenInverterGateway's ENABLE_MODBUS_COMMUNICATION WebGUI feature:
+  # read 16/32-bit input or holding registers, and write 16-bit holding registers.
+  - platform: template
+    name: Modbus Register Address
+    id: modbus_rw_register_address_entity
+    entity_category: config
+    icon: mdi:numeric
+    min_value: 0
+    max_value: 65535
+    step: 1
+    mode: box
+    lambda: |-
+      return id(modbus_rw_register_address);
+    set_action:
+      - lambda: |-
+          id(modbus_rw_register_address) = (uint16_t) x;
+
+  - platform: template
+    name: Modbus Register Value
+    id: modbus_rw_register_value_entity
+    entity_category: config
+    icon: mdi:numeric
+    min_value: 0
+    max_value: 65535
+    step: 1
+    mode: box
+    lambda: |-
+      return id(modbus_rw_register_value);
+    set_action:
+      - lambda: |-
+          id(modbus_rw_register_value) = (uint16_t) x;
+
   # This is the ESPHome equivalent of ENABLE_MODBUS_COMMUNICATION=1 for the
   # active-power write path used by OpenInverterGateway's WebGUI command API.
   - platform: modbus_controller
@@ -796,6 +855,34 @@ number:
     mode: box
 
 switch:
+  - platform: template
+    name: Modbus Use Holding Register
+    id: modbus_rw_use_holding_register_entity
+    entity_category: config
+    icon: mdi:database-edit
+    lambda: |-
+      return id(modbus_rw_use_holding_register);
+    turn_on_action:
+      - lambda: |-
+          id(modbus_rw_use_holding_register) = true;
+    turn_off_action:
+      - lambda: |-
+          id(modbus_rw_use_holding_register) = false;
+
+  - platform: template
+    name: Modbus Read 32 Bit
+    id: modbus_rw_read_32bit_entity
+    entity_category: config
+    icon: mdi:numeric-2-box-multiple-outline
+    lambda: |-
+      return id(modbus_rw_read_32bit);
+    turn_on_action:
+      - lambda: |-
+          id(modbus_rw_read_32bit) = true;
+    turn_off_action:
+      - lambda: |-
+          id(modbus_rw_read_32bit) = false;
+
   # Export limit helper from upstream command implementation:
   # HR122 must be 1, HR123 is 1000 for enabled / 0 for disabled.
   - platform: modbus_controller
@@ -809,6 +896,84 @@ switch:
     icon: mdi:transmission-tower-export
 
 button:
+  - platform: template
+    name: Modbus Read Register
+    icon: mdi:database-search
+    entity_category: config
+    on_press:
+      then:
+        - lambda: |-
+            auto *ctrl = id(growatt);
+            auto *result = id(modbus_rw_last_result);
+            const uint16_t address = id(modbus_rw_register_address);
+            const bool holding = id(modbus_rw_use_holding_register);
+            const uint16_t count = id(modbus_rw_read_32bit) ? 2 : 1;
+            const auto register_type = holding
+                ? esphome::modbus::ModbusRegisterType::HOLDING
+                : esphome::modbus::ModbusRegisterType::READ;
+
+            char queued[96];
+            snprintf(queued, sizeof(queued), "Queued read %u-bit %s register %u",
+                     count == 2 ? 32 : 16, holding ? "holding" : "input", address);
+            result->publish_state(queued);
+
+            ctrl->queue_command(esphome::modbus_controller::ModbusCommandItem::create_read_command(
+                ctrl, register_type, address, count,
+                [result, address, count, holding](esphome::modbus::ModbusRegisterType register_type,
+                                                  uint16_t start_address,
+                                                  const std::vector<uint8_t> &data) {
+                  char msg[128];
+                  if (data.size() < count * 2) {
+                    snprintf(msg, sizeof(msg), "Read %u-bit %s register %u failed: short response (%u bytes)",
+                             count == 2 ? 32 : 16, holding ? "holding" : "input", address,
+                             (unsigned) data.size());
+                    result->publish_state(msg);
+                    return;
+                  }
+                  uint32_t value = ((uint32_t) data[0] << 8) | data[1];
+                  if (count == 2) {
+                    value = ((uint32_t) data[0] << 24) | ((uint32_t) data[1] << 16) |
+                            ((uint32_t) data[2] << 8) | data[3];
+                  }
+                  snprintf(msg, sizeof(msg), "Read %u-bit %s register %u = %lu",
+                           count == 2 ? 32 : 16, holding ? "holding" : "input", address,
+                           (unsigned long) value);
+                  result->publish_state(msg);
+                }));
+
+  - platform: template
+    name: Modbus Write Holding Register
+    icon: mdi:database-arrow-up
+    entity_category: config
+    on_press:
+      then:
+        - lambda: |-
+            auto *ctrl = id(growatt);
+            auto *result = id(modbus_rw_last_result);
+            const uint16_t address = id(modbus_rw_register_address);
+            const uint16_t value = id(modbus_rw_register_value);
+
+            char queued[96];
+            snprintf(queued, sizeof(queued), "Queued write holding register %u = %u", address, value);
+            result->publish_state(queued);
+
+            auto cmd = esphome::modbus_controller::ModbusCommandItem::create_write_single_command(ctrl, address, value);
+            cmd.on_data_func = [result, address, value](esphome::modbus::ModbusRegisterType register_type,
+                                                        uint16_t start_address,
+                                                        const std::vector<uint8_t> &data) {
+              char msg[128];
+              if (data.size() >= 4) {
+                const uint16_t ack_address = ((uint16_t) data[0] << 8) | data[1];
+                const uint16_t ack_value = ((uint16_t) data[2] << 8) | data[3];
+                snprintf(msg, sizeof(msg), "Wrote holding register %u = %u (ack register %u = %u)",
+                         address, value, ack_address, ack_value);
+              } else {
+                snprintf(msg, sizeof(msg), "Write holding register %u = %u acknowledged", address, value);
+              }
+              result->publish_state(msg);
+            };
+            ctrl->queue_command(cmd);
+
   - platform: template
     name: Enable Export
     icon: mdi:transmission-tower-export
