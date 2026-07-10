@@ -27,10 +27,6 @@ modbus_controller:
     setup_priority: -10
     update_interval: ${update_interval}
 
-binary_sensor:
-  - platform: status
-    name: Status
-
 sensor:
   # Growatt protocol v1.24 input registers, taken from the upstream
   # OpenInverterGateway Growatt124 definition. 32-bit values are high-word first.
