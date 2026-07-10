@@ -21,3 +21,19 @@ Before flashing, replace the placeholder Wi-Fi substitutions in the YAML or over
 ## Notes
 
 Serial logging is disabled (`logger.baud_rate: 0`) because the inverter uses the hardware UART.
+
+### Reusable ESPHome package
+
+If you already have your own ESPHome device YAML, import only the ShineWiFi-X Modbus part instead of copying the full sensor list:
+
+```yaml
+packages:
+  growatt_shinewifix:
+    url: https://github.com/Finest/OpenInverterGateway
+    ref: esphome-port-shinewifix
+    files:
+      - esphome/packages/shinewifix-modbus.yaml
+    refresh: 1d
+```
+
+Your main YAML should still define `esphome`, `esp8266`, `logger`, `api`, `ota`, `wifi`, `web_server`, and optionally `status_led`.
