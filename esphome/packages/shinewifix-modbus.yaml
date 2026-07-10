@@ -7,10 +7,9 @@ substitutions:
 
 esphome:
   on_boot:
-    # The device imports this file as a remote package. Keep the compatibility
-    # WebGUI routes in the package itself so they are compiled into package
-    # consumers such as growatt-shine-wifi-x.yaml.
-    priority: -100
+    # Register before ESPHome's generic web_server handler (priority WIFI - 1 = 249)
+    # so the normal root page can include the Modbus compatibility form inline.
+    priority: 249.5
     then:
       - lambda: |-
           using esphome::modbus::ModbusRegisterType;
@@ -20,9 +19,9 @@ esphome:
           auto *ctrl = id(growatt);
           auto *result = id(modbus_rw_last_result);
 
-          if (global_web_server_base == nullptr || global_web_server_base->get_server() == nullptr) {
+          if (global_web_server_base == nullptr) {
             if (result != nullptr)
-              result->publish_state("Modbus WebGUI route registration failed: web server not ready");
+              result->publish_state("Modbus WebGUI route registration failed: web server base not ready");
             return;
           }
 
@@ -44,46 +43,58 @@ esphome:
             return true;
           };
 
-          static const char *form = R"=====(
-          <!DOCTYPE HTML><html>
-          <head>
-            <meta charset='utf-8'>
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <title>Growatt Inverter</title>
-          </head>
-          <body>
+          auto add_route = [](const char *uri, WebRequestMethodComposite method,
+                              ArRequestHandlerFunction on_request) {
+            auto *handler = new AsyncCallbackWebHandler();
+            handler->setUri(uri);
+            handler->setMethod(method);
+            handler->onRequest(on_request);
+            global_web_server_base->add_handler(handler);
+          };
+
+          static const char *index_html = R"=====(<!DOCTYPE html><html><head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width,initial-scale=1">
+          <link rel="icon" href="data:">
+          <style>
+            body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#111;color:#eee}
+            .oig-box{box-sizing:border-box;margin:12px;padding:16px;border-radius:12px;background:#1f1f1f;border:1px solid #333;max-width:760px}
+            .oig-box h2{margin:0 0 12px;font-size:1.25rem}
+            .oig-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:10px}
+            .oig-box input,.oig-box select,.oig-box button{box-sizing:border-box;width:100%;padding:10px;border-radius:8px;border:1px solid #555;background:#2a2a2a;color:#fff}
+            .oig-box button{cursor:pointer;background:#1565c0;border-color:#1976d2;font-weight:bold}
+            .oig-box small{color:#bbb}.oig-result{margin-top:10px;white-space:pre-wrap;color:#ddd}
+          </style>
+          </head><body>
+          <esp-app></esp-app>
+          <section class="oig-box">
             <h2>Growatt Post Communication Modbus</h2>
-            <form action="/postCommunicationModbus_p" method="POST">
-              <input type="text" name="reg" placeholder="Register ID"></br>
-              <input type="text" name="val" placeholder="Input Value (16bit only!)"></br>
-              <select name="type">
-                <option value="16b" selected>16b</option>
-                <option value="32b">32b</option>
-              </select></br>
-              <select name="operation">
-                <option value="R" selected>Read</option>
-                <option value="W">Write</option>
-              </select></br>
-              <select name="registerType">
-                <option value="I" selected>Input Register</option>
-                <option value="H">Holding Register</option>
-              </select></br>
-              <input type="submit" value="go">
+            <form id="oig-modbus-form" action="/postCommunicationModbus_p" method="POST">
+              <div class="oig-grid">
+                <input type="text" name="reg" placeholder="Register ID" required>
+                <input type="text" name="val" placeholder="Input Value (16bit only!)" value="0" required>
+                <select name="type"><option value="16b" selected>16b</option><option value="32b">32b</option></select>
+                <select name="operation"><option value="R" selected>Read</option><option value="W">Write</option></select>
+                <select name="registerType"><option value="I" selected>Input Register</option><option value="H">Holding Register</option></select>
+                <button type="submit">go</button>
+              </div>
             </form>
-            <p><small>ESPHome queues Modbus commands asynchronously. The final answer is also published to <b>Modbus Last Result</b>.</small></p>
-            <a href=".">back</a>
-          </body>
-          </html>
-          )=====";
+            <small>ESPHome queues Modbus commands asynchronously. The final answer is also published to <b>Modbus Last Result</b>.</small>
+            <div id="oig-modbus-result" class="oig-result"></div>
+          </section>
+          <script>
+            const f=document.getElementById('oig-modbus-form'),r=document.getElementById('oig-modbus-result');
+            f.addEventListener('submit',async e=>{e.preventDefault();r.textContent='Sending...';try{const res=await fetch(f.action,{method:'POST',body:new FormData(f)});r.textContent=await res.text();}catch(err){r.textContent='Request failed: '+err;}});
+          </script>
+          <script src="https://oi.esphome.io/v2/www.js"></script>
+          </body></html>)=====";
 
-          auto *server = global_web_server_base->get_server();
-
-          server->on("/postCommunicationModbus", HTTP_GET, [form](AsyncWebServerRequest *request) {
-            request->send(200, "text/html", form);
+          add_route("/", HTTP_GET, [index_html](AsyncWebServerRequest *request) {
+            request->send(200, "text/html", index_html);
           });
 
-          server->on("/postCommunicationModbus_p", HTTP_POST,
-                     [ctrl, result, publish_result, parse_u16](AsyncWebServerRequest *request) {
+          add_route("/postCommunicationModbus_p", HTTP_POST,
+                    [ctrl, result, publish_result, parse_u16](AsyncWebServerRequest *request) {
                        if (!request->hasParam("reg", true) || !request->hasParam("val", true)) {
                          request->send(400, "text/plain", "400: Invalid Request");
                          return;
@@ -194,7 +205,7 @@ esphome:
                        request->send(200, "text/plain", queued);
                      });
 
-          publish_result("Modbus WebGUI routes available at /postCommunicationModbus");
+          publish_result("Modbus WebGUI section available on ESPHome root page");
 
 uart:
   id: inverter_uart
