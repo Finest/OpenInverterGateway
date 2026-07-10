@@ -5,7 +5,7 @@ substitutions:
   wifi_password: CHANGE_ME
   # Growatt ShineWiFi-X talks Modbus RTU as master at 115200 baud, slave id 1.
   modbus_address: "0x01"
-  update_interval: 5s
+  update_interval: 30s
 
 esphome:
   name: ${device_name}
@@ -60,13 +60,13 @@ uart:
 modbus:
   id: growatt_modbus
   uart_id: inverter_uart
-  send_wait_time: 200ms
+  send_wait_time: 500ms
 
 modbus_controller:
   - id: growatt
     address: ${modbus_address}
     modbus_id: growatt_modbus
-    command_throttle: 100ms
+    command_throttle: 250ms
     setup_priority: -10
     update_interval: ${update_interval}
 
