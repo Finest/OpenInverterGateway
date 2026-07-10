@@ -59,7 +59,7 @@ Key defaults:
 Compile with ESPHome:
 
 ```bash
-docker run --rm -v "$PWD":/config -w /config esphome/esphome:2026.4.4 compile esphome/openinvertergateway-shinewifix.yaml
+docker run --rm -v "$PWD":/config -w /config esphome/esphome:2026.6.5 compile esphome/openinvertergateway-shinewifix.yaml
 ```
 
 ### Flashing / Hardware

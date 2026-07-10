@@ -13,7 +13,7 @@ This folder contains the ESPHome port target for a Growatt ShineWiFi-X stick.
 ## Compile locally
 
 ```bash
-docker run --rm -v "$PWD":/config -w /config esphome/esphome:2026.4.4 compile esphome/openinvertergateway-shinewifix.yaml
+docker run --rm -v "$PWD":/config -w /config esphome/esphome:2026.6.5 compile esphome/openinvertergateway-shinewifix.yaml
 ```
 
 Before flashing, replace the placeholder Wi-Fi substitutions in the YAML or override them in your own package/secrets setup.
