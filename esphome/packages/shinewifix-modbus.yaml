@@ -57,17 +57,27 @@ esphome:
           <meta name="viewport" content="width=device-width,initial-scale=1">
           <link rel="icon" href="data:">
           <style>
-            body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#111;color:#eee}
-            .oig-box{box-sizing:border-box;margin:12px;padding:16px;border-radius:12px;background:#1f1f1f;border:1px solid #333;max-width:760px}
+            body{margin:0;background:#111;color:#eee;font-family:Arial,Helvetica,sans-serif}
+            .oig-box{box-sizing:border-box;margin:12px;padding:16px;border-radius:12px;background:#1f1f1f;border:1px solid #333}
             .oig-box h2{margin:0 0 12px;font-size:1.25rem}
+            .oig-graph{max-width:none}
+            .oig-graph-head{display:flex;gap:12px;align-items:baseline;justify-content:space-between;flex-wrap:wrap}
+            #oig-power-chart{width:100%;height:260px;display:block;background:#141414;border-radius:10px;border:1px solid #2a2a2a}
+            #oig-power-legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;color:#ccc;font-size:.9rem}
+            .oig-legend-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px}
             .oig-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:10px}
             .oig-box input,.oig-box select,.oig-box button{box-sizing:border-box;width:100%;padding:10px;border-radius:8px;border:1px solid #555;background:#2a2a2a;color:#fff}
             .oig-box button{cursor:pointer;background:#1565c0;border-color:#1976d2;font-weight:bold}
             .oig-box small{color:#bbb}.oig-result{margin-top:10px;white-space:pre-wrap;color:#ddd}
           </style>
           </head><body>
+          <section id="oig-power-panel" class="oig-box oig-graph">
+            <div class="oig-graph-head"><h2>Growatt Live Power Graph</h2><small id="oig-power-status">waiting for data...</small></div>
+            <canvas id="oig-power-chart" width="900" height="260"></canvas>
+            <div id="oig-power-legend"></div>
+          </section>
           <esp-app></esp-app>
-          <section class="oig-box">
+          <section id="oig-modbus-panel" class="oig-box">
             <h2>Growatt Post Communication Modbus</h2>
             <form id="oig-modbus-form" action="/postCommunicationModbus_p" method="POST">
               <div class="oig-grid">
@@ -83,8 +93,27 @@ esphome:
             <div id="oig-modbus-result" class="oig-result"></div>
           </section>
           <script>
-            const f=document.getElementById('oig-modbus-form'),r=document.getElementById('oig-modbus-result');
-            f.addEventListener('submit',async e=>{e.preventDefault();r.textContent='Sending...';try{const res=await fetch(f.action,{method:'POST',body:new FormData(f)});r.textContent=await res.text();}catch(err){r.textContent='Request failed: '+err;}});
+            (function(){
+              const wanted={
+                'sensor-input_power':{label:'Input Power',color:'#ff6384'},
+                'sensor-pv1_input_power':{label:'PV1 Input Power',color:'#ffcd56'},
+                'sensor-pv2_input_power':{label:'PV2 Input Power',color:'#4bc0c0'},
+                'sensor-output_power':{label:'Output Power',color:'#36a2eb'},
+                'sensor-local_load_power_total':{label:'Local Load Power',color:'#9966ff'},
+                'sensor-ac_power_to_grid':{label:'AC Power To Grid',color:'#ff9f40'}
+              };
+              const latest={},history=[],maxPoints=72,canvas=document.getElementById('oig-power-chart'),ctx=canvas.getContext('2d'),status=document.getElementById('oig-power-status'),legend=document.getElementById('oig-power-legend');
+              legend.innerHTML=Object.keys(wanted).map(k=>'<span><i class="oig-legend-dot" style="background:'+wanted[k].color+'"></i>'+wanted[k].label+'</span>').join('');
+              function resize(){const w=canvas.clientWidth||900,h=canvas.clientHeight||260;if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;draw();}}
+              function sample(){const keys=Object.keys(latest);if(!keys.length){draw();return;}const row={t:new Date(),v:{}};keys.forEach(k=>row.v[k]=latest[k]);history.push(row);while(history.length>maxPoints)history.shift();status.textContent='updated '+row.t.toLocaleTimeString();draw();}
+              function draw(){resize();const w=canvas.width,h=canvas.height,p=34;ctx.clearRect(0,0,w,h);ctx.fillStyle='#141414';ctx.fillRect(0,0,w,h);const keys=Object.keys(wanted).filter(k=>history.some(r=>typeof r.v[k]==='number'));let max=100;keys.forEach(k=>history.forEach(r=>{if(typeof r.v[k]==='number')max=Math.max(max,r.v[k]);}));max=Math.ceil(max/100)*100;ctx.strokeStyle='#333';ctx.lineWidth=1;ctx.fillStyle='#aaa';ctx.font='12px Arial';for(let i=0;i<=4;i++){const y=p+(h-2*p)*i/4,val=Math.round(max*(1-i/4));ctx.beginPath();ctx.moveTo(p,y);ctx.lineTo(w-p,y);ctx.stroke();ctx.fillText(val+' W',4,y+4);}if(history.length<2)return;keys.forEach(k=>{ctx.strokeStyle=wanted[k].color;ctx.lineWidth=2;ctx.beginPath();history.forEach((r,i)=>{const x=p+(w-2*p)*i/(maxPoints-1),y=h-p-((r.v[k]||0)/max)*(h-2*p);if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);});ctx.stroke();});ctx.fillStyle='#aaa';if(history.length){ctx.fillText(history[0].t.toLocaleTimeString(),p,h-8);ctx.fillText(history[history.length-1].t.toLocaleTimeString(),w-p-60,h-8);}}
+              try{const es=new EventSource('events');es.addEventListener('state',ev=>{try{const d=JSON.parse(ev.data);if(wanted[d.id]&&typeof d.value==='number')latest[d.id]=d.value;}catch(e){}});es.addEventListener('error',()=>{status.textContent='event stream reconnecting...';});}catch(e){status.textContent='event stream unavailable';}
+              window.addEventListener('resize',resize);setInterval(sample,5000);resize();
+              const f=document.getElementById('oig-modbus-form'),r=document.getElementById('oig-modbus-result');
+              f.addEventListener('submit',async e=>{e.preventDefault();r.textContent='Sending...';try{const res=await fetch(f.action,{method:'POST',body:new FormData(f)});r.textContent=await res.text();}catch(err){r.textContent='Request failed: '+err;}});
+              function sinkLogs(){const app=document.querySelector('esp-app');const roots=[document];if(app&&app.shadowRoot)roots.push(app.shadowRoot);roots.forEach(root=>{Array.from(root.querySelectorAll('section,article,div,ha-card')).forEach(el=>{if(el.id&&el.id.indexOf('oig-')===0)return;const txt=(el.textContent||'').trim().toLowerCase();if(txt.length>8&&txt.length<5000&&(txt.indexOf('log output')>=0||txt.indexOf('session output')>=0||txt==='logs'||txt.indexOf(' logs')>=0)){if(el.parentNode)el.parentNode.appendChild(el);}});});}
+              setInterval(sinkLogs,3000);setTimeout(sinkLogs,1500);
+            })();
           </script>
           <script src="https:&#47;&#47;oi.esphome.io/v2/www.js"></script>
           </body></html>)=====";
