@@ -14,7 +14,10 @@ esphome:
   includes:
     - openinvertergateway_modbus_web.h
   on_boot:
-    priority: -100
+    # ESPHome's web_server handler is registered at setup priority WIFI - 1 (249).
+    # Register these custom routes just before that so they are matched before
+    # the generic ESPHome handler returns its own 404 for unknown paths.
+    priority: 249.5
     then:
       - lambda: |-
           openinvertergateway::modbus_web::register_routes(id(growatt), id(modbus_rw_last_result));
