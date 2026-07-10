@@ -86,7 +86,7 @@ esphome:
             const f=document.getElementById('oig-modbus-form'),r=document.getElementById('oig-modbus-result');
             f.addEventListener('submit',async e=>{e.preventDefault();r.textContent='Sending...';try{const res=await fetch(f.action,{method:'POST',body:new FormData(f)});r.textContent=await res.text();}catch(err){r.textContent='Request failed: '+err;}});
           </script>
-          <script src="https://oi.esphome.io/v2/www.js"></script>
+          <script src="https:&#47;&#47;oi.esphome.io/v2/www.js"></script>
           </body></html>)=====";
 
           add_route("/", HTTP_GET, [index_html](AsyncWebServerRequest *request) {
