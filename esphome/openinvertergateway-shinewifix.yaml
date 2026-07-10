@@ -11,6 +11,13 @@ esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
   comment: "ESPHome port of OpenInverterGateway for Growatt ShineWiFi-X"
+  includes:
+    - openinvertergateway_modbus_web.h
+  on_boot:
+    priority: -100
+    then:
+      - lambda: |-
+          openinvertergateway::modbus_web::register_routes(id(growatt), id(modbus_rw_last_result));
   project:
     name: finest.openinvertergateway
     version: "0.1.0"
