@@ -1,0 +1,830 @@
+substitutions:
+  device_name: openinvertergateway
+  friendly_name: OpenInverterGateway
+  wifi_ssid: CHANGE_ME
+  wifi_password: CHANGE_ME
+  # Growatt ShineWiFi-X talks Modbus RTU as master at 115200 baud, slave id 1.
+  modbus_address: "0x01"
+  update_interval: 5s
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  comment: "ESPHome port of OpenInverterGateway for Growatt ShineWiFi-X"
+  project:
+    name: finest.openinvertergateway
+    version: "0.1.0"
+
+esp8266:
+  board: esp07s
+  restore_from_flash: true
+
+# The ShineWiFi-X uses the ESP8266 hardware UART for inverter communication.
+# Keep serial logging disabled or it will corrupt Modbus traffic.
+logger:
+  baud_rate: 0
+  level: INFO
+
+api:
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: ${wifi_ssid}
+  password: ${wifi_password}
+  min_auth_mode: WPA2
+  ap:
+    ssid: "${friendly_name} Fallback"
+    password: "openinverter"
+
+captive_portal:
+
+web_server:
+  port: 80
+
+status_led:
+  pin:
+    number: GPIO2
+    inverted: true
+
+uart:
+  id: inverter_uart
+  tx_pin: GPIO1
+  rx_pin: GPIO3
+  baud_rate: 115200
+  data_bits: 8
+  parity: NONE
+  stop_bits: 1
+
+modbus:
+  id: growatt_modbus
+  uart_id: inverter_uart
+  send_wait_time: 200ms
+
+modbus_controller:
+  - id: growatt
+    address: ${modbus_address}
+    modbus_id: growatt_modbus
+    command_throttle: 100ms
+    setup_priority: -10
+    update_interval: ${update_interval}
+
+binary_sensor:
+  - platform: status
+    name: Status
+
+sensor:
+  # Growatt protocol v1.24 input registers, taken from the upstream
+  # OpenInverterGateway Growatt124 definition. 32-bit values are high-word first.
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Inverter Status
+    id: inverter_status
+    register_type: read
+    address: 0
+    value_type: U_WORD
+    icon: mdi:state-machine
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Input Power
+    id: input_power
+    register_type: read
+    address: 1
+    value_type: U_DWORD
+    unit_of_measurement: W
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: PV1 Voltage
+    id: pv1_voltage
+    register_type: read
+    address: 3
+    value_type: U_WORD
+    unit_of_measurement: V
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: PV1 Input Current
+    id: pv1_input_current
+    register_type: read
+    address: 4
+    value_type: U_WORD
+    unit_of_measurement: A
+    device_class: current
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: PV1 Input Power
+    id: pv1_input_power
+    register_type: read
+    address: 5
+    value_type: U_DWORD
+    unit_of_measurement: W
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: PV2 Voltage
+    id: pv2_voltage
+    register_type: read
+    address: 7
+    value_type: U_WORD
+    unit_of_measurement: V
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: PV2 Input Current
+    id: pv2_input_current
+    register_type: read
+    address: 8
+    value_type: U_WORD
+    unit_of_measurement: A
+    device_class: current
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: PV2 Input Power
+    id: pv2_input_power
+    register_type: read
+    address: 9
+    value_type: U_DWORD
+    unit_of_measurement: W
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Output Power
+    id: output_power
+    register_type: read
+    address: 35
+    value_type: S_DWORD
+    unit_of_measurement: W
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Grid Frequency
+    id: grid_frequency
+    register_type: read
+    address: 37
+    value_type: U_WORD
+    unit_of_measurement: Hz
+    device_class: frequency
+    state_class: measurement
+    accuracy_decimals: 2
+    filters:
+      - multiply: 0.01
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: L1 Grid Voltage
+    id: l1_grid_voltage
+    register_type: read
+    address: 38
+    value_type: U_WORD
+    unit_of_measurement: V
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: L1 Grid Output Current
+    id: l1_grid_output_current
+    register_type: read
+    address: 39
+    value_type: U_WORD
+    unit_of_measurement: A
+    device_class: current
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: L1 Grid Output Power
+    id: l1_grid_output_power
+    register_type: read
+    address: 40
+    value_type: U_DWORD
+    unit_of_measurement: VA
+    device_class: apparent_power
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: L2 Grid Voltage
+    id: l2_grid_voltage
+    register_type: read
+    address: 42
+    value_type: U_WORD
+    unit_of_measurement: V
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: L2 Grid Output Current
+    id: l2_grid_output_current
+    register_type: read
+    address: 43
+    value_type: U_WORD
+    unit_of_measurement: A
+    device_class: current
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: L2 Grid Output Power
+    id: l2_grid_output_power
+    register_type: read
+    address: 44
+    value_type: U_DWORD
+    unit_of_measurement: VA
+    device_class: apparent_power
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: L3 Grid Voltage
+    id: l3_grid_voltage
+    register_type: read
+    address: 46
+    value_type: U_WORD
+    unit_of_measurement: V
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: L3 Grid Output Current
+    id: l3_grid_output_current
+    register_type: read
+    address: 47
+    value_type: U_WORD
+    unit_of_measurement: A
+    device_class: current
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: L3 Grid Output Power
+    id: l3_grid_output_power
+    register_type: read
+    address: 48
+    value_type: U_DWORD
+    unit_of_measurement: VA
+    device_class: apparent_power
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Today Generate Energy
+    id: today_generate_energy
+    register_type: read
+    address: 53
+    value_type: U_DWORD
+    unit_of_measurement: kWh
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Total Generate Energy
+    id: total_generate_energy
+    register_type: read
+    address: 55
+    value_type: U_DWORD
+    unit_of_measurement: kWh
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: PV1 Energy Today
+    id: pv1_energy_today
+    register_type: read
+    address: 59
+    value_type: U_DWORD
+    unit_of_measurement: kWh
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: PV1 Energy Total
+    id: pv1_energy_total
+    register_type: read
+    address: 61
+    value_type: U_DWORD
+    unit_of_measurement: kWh
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: PV2 Energy Today
+    id: pv2_energy_today
+    register_type: read
+    address: 63
+    value_type: U_DWORD
+    unit_of_measurement: kWh
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: PV2 Energy Total
+    id: pv2_energy_total
+    register_type: read
+    address: 65
+    value_type: U_DWORD
+    unit_of_measurement: kWh
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: PV Energy Total
+    id: pv_energy_total
+    register_type: read
+    address: 91
+    value_type: U_DWORD
+    unit_of_measurement: kWh
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Inverter Temperature
+    id: inverter_temperature
+    register_type: read
+    address: 93
+    value_type: U_WORD
+    unit_of_measurement: °C
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: IPM Temperature
+    id: ipm_temperature
+    register_type: read
+    address: 94
+    value_type: U_WORD
+    unit_of_measurement: °C
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Boost Temperature
+    id: boost_temperature
+    register_type: read
+    address: 95
+    value_type: U_WORD
+    unit_of_measurement: °C
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Discharge Power
+    id: discharge_power
+    register_type: read
+    address: 1009
+    value_type: U_DWORD
+    unit_of_measurement: W
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Charge Power
+    id: charge_power
+    register_type: read
+    address: 1011
+    value_type: U_DWORD
+    unit_of_measurement: W
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Battery Voltage
+    id: battery_voltage
+    register_type: read
+    address: 1013
+    value_type: U_WORD
+    unit_of_measurement: V
+    device_class: voltage
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Battery SOC
+    id: battery_soc
+    register_type: read
+    address: 1014
+    value_type: U_WORD
+    unit_of_measurement: "%"
+    device_class: battery
+    state_class: measurement
+    accuracy_decimals: 0
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: AC Power To User
+    id: ac_power_to_user
+    register_type: read
+    address: 1015
+    value_type: U_DWORD
+    unit_of_measurement: W
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: AC Power To Grid
+    id: ac_power_to_grid
+    register_type: read
+    address: 1023
+    value_type: U_DWORD
+    unit_of_measurement: W
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Inverter Power To Local Load
+    id: inverter_power_to_local_load
+    register_type: read
+    address: 1031
+    value_type: U_DWORD
+    unit_of_measurement: W
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Local Load Power Total
+    id: local_load_power_total
+    register_type: read
+    address: 1037
+    value_type: U_DWORD
+    unit_of_measurement: W
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Battery Temperature
+    id: battery_temperature
+    register_type: read
+    address: 1040
+    value_type: U_WORD
+    unit_of_measurement: °C
+    device_class: temperature
+    state_class: measurement
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Battery State
+    id: battery_state
+    register_type: read
+    address: 1041
+    value_type: U_WORD
+    icon: mdi:battery-sync
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Energy To User Today
+    id: energy_to_user_today
+    register_type: read
+    address: 1044
+    value_type: U_DWORD
+    unit_of_measurement: kWh
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Energy To User Total
+    id: energy_to_user_total
+    register_type: read
+    address: 1046
+    value_type: U_DWORD
+    unit_of_measurement: kWh
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Energy To Grid Today
+    id: energy_to_grid_today
+    register_type: read
+    address: 1048
+    value_type: U_DWORD
+    unit_of_measurement: kWh
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Energy To Grid Total
+    id: energy_to_grid_total
+    register_type: read
+    address: 1050
+    value_type: U_DWORD
+    unit_of_measurement: kWh
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Discharge Energy Today
+    id: discharge_energy_today
+    register_type: read
+    address: 1052
+    value_type: U_DWORD
+    unit_of_measurement: kWh
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Discharge Energy Total
+    id: discharge_energy_total
+    register_type: read
+    address: 1054
+    value_type: U_DWORD
+    unit_of_measurement: kWh
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Charge Energy Today
+    id: charge_energy_today
+    register_type: read
+    address: 1056
+    value_type: U_DWORD
+    unit_of_measurement: kWh
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Charge Energy Total
+    id: charge_energy_total
+    register_type: read
+    address: 1058
+    value_type: U_DWORD
+    unit_of_measurement: kWh
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Local Load Energy Today
+    id: local_load_energy_today
+    register_type: read
+    address: 1060
+    value_type: U_DWORD
+    unit_of_measurement: kWh
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Local Load Energy Total
+    id: local_load_energy_total
+    register_type: read
+    address: 1062
+    value_type: U_DWORD
+    unit_of_measurement: kWh
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: AC Charge Energy Today
+    id: ac_charge_energy_today
+    register_type: read
+    address: 1124
+    value_type: U_DWORD
+    unit_of_measurement: kWh
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: AC Charge Energy Total
+    id: ac_charge_energy_total
+    register_type: read
+    address: 1126
+    value_type: U_DWORD
+    unit_of_measurement: kWh
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 1
+    filters:
+      - multiply: 0.1
+
+number:
+  # This is the ESPHome equivalent of ENABLE_MODBUS_COMMUNICATION=1 for the
+  # active-power write path used by OpenInverterGateway's WebGUI command API.
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Active Power Rate
+    id: active_power_rate
+    register_type: holding
+    address: 3
+    value_type: U_WORD
+    unit_of_measurement: "%"
+    min_value: 0
+    max_value: 100
+    step: 1
+    mode: box
+
+switch:
+  # Export limit helper from upstream command implementation:
+  # HR122 must be 1, HR123 is 1000 for enabled / 0 for disabled.
+  - platform: modbus_controller
+    modbus_controller_id: growatt
+    name: Export Limit Control Flag
+    id: export_limit_control_flag
+    register_type: holding
+    address: 122
+    bitmask: 1
+    entity_category: config
+    icon: mdi:transmission-tower-export
+
+button:
+  - platform: template
+    name: Enable Export
+    icon: mdi:transmission-tower-export
+    on_press:
+      then:
+        - lambda: |-
+            auto *ctrl = id(growatt);
+            ctrl->queue_command(esphome::modbus_controller::ModbusCommandItem::create_write_single_command(ctrl, 122, 1));
+            ctrl->queue_command(esphome::modbus_controller::ModbusCommandItem::create_write_single_command(ctrl, 123, 1000));
+
+  - platform: template
+    name: Disable Export
+    icon: mdi:transmission-tower-off
+    on_press:
+      then:
+        - lambda: |-
+            auto *ctrl = id(growatt);
+            ctrl->queue_command(esphome::modbus_controller::ModbusCommandItem::create_write_single_command(ctrl, 122, 1));
+            ctrl->queue_command(esphome::modbus_controller::ModbusCommandItem::create_write_single_command(ctrl, 123, 0));

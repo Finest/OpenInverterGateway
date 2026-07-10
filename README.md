@@ -45,6 +45,23 @@ Firmware replacement for Growatt ShineWiFi-S (serial), ShineWiFi-X (USB) or cust
 5. Compile using the **Build** task from PlatformIO.
 6. Follow the [flashing / hardware section below](#flashing--hardware).
 
+### ESPHome port for ShineWiFi-X
+
+This fork also contains an ESPHome configuration for ShineWiFi-X at [`esphome/openinvertergateway-shinewifix.yaml`](esphome/openinvertergateway-shinewifix.yaml).
+
+Key defaults:
+
+* MQTT is disabled; Home Assistant reads the device through ESPHome native API.
+* Modbus read/write support is enabled through ESPHome `modbus_controller` entities, matching the intent of `ENABLE_MODBUS_COMMUNICATION=1`.
+* UART is configured for ShineWiFi-X / Growatt protocol 1.24 at `115200 8N1` on GPIO1/GPIO3.
+* Serial logging is disabled to avoid corrupting inverter Modbus traffic.
+
+Compile with ESPHome:
+
+```bash
+docker run --rm -v "$PWD":/config -w /config esphome/esphome:2026.4.4 compile esphome/openinvertergateway-shinewifix.yaml
+```
+
 ### Flashing / Hardware
 
 1. Flash the image to your hardware (ESP32 / ESP8266esp32 / ShineWifiX-S / ShineWifi-X / …). [Details on how to do this are provided in the documentation](/Doc/).
