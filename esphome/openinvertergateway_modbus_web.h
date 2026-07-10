@@ -61,13 +61,22 @@ inline void publish_result_(esphome::text_sensor::TextSensor *result, const char
     result->publish_state(msg);
 }
 
+inline void add_authenticated_route_(const char *uri, WebRequestMethodComposite method,
+                                     ArRequestHandlerFunction on_request) {
+  auto *handler = new AsyncCallbackWebHandler();
+  handler->setUri(uri);
+  handler->setMethod(method);
+  handler->onRequest(on_request);
+  esphome::web_server_base::global_web_server_base->add_handler(handler);
+}
+
 inline void register_routes(esphome::modbus_controller::ModbusController *ctrl,
                             esphome::text_sensor::TextSensor *result) {
   using esphome::modbus::ModbusRegisterType;
   using esphome::modbus_controller::ModbusCommandItem;
   using esphome::web_server_base::global_web_server_base;
 
-  if (global_web_server_base == nullptr || global_web_server_base->get_server() == nullptr) {
+  if (global_web_server_base == nullptr) {
     publish_result_(result, "Modbus WebGUI route registration failed: web server not ready");
     return;
   }
@@ -77,13 +86,13 @@ inline void register_routes(esphome::modbus_controller::ModbusController *ctrl,
   // the same register.
   ctrl->set_allow_duplicate_commands(true);
 
-  auto *server = global_web_server_base->get_server();
-
-  server->on("/postCommunicationModbus", HTTP_GET, [](AsyncWebServerRequest *request) {
+  // Register through WebServerBase instead of AsyncWebServer::on() so these
+  // custom endpoints inherit ESPHome's optional web_server auth middleware.
+  add_authenticated_route_("/postCommunicationModbus", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send(200, "text/html", MODBUS_FORM_HTML);
   });
 
-  server->on("/postCommunicationModbus_p", HTTP_POST,
+  add_authenticated_route_("/postCommunicationModbus_p", HTTP_POST,
              [ctrl, result](AsyncWebServerRequest *request) {
                if (!request->hasParam("reg", true) || !request->hasParam("val", true)) {
                  request->send(400, "text/plain", "400: Invalid Request");
