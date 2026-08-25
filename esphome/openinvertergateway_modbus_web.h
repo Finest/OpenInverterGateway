@@ -72,7 +72,7 @@ inline void add_authenticated_route_(const char *uri, WebRequestMethodComposite 
 
 inline void register_routes(esphome::modbus_controller::ModbusController *ctrl,
                             esphome::text_sensor::TextSensor *result) {
-  using esphome::modbus::ModbusRegisterType;
+  using esphome::modbus::EntityType;
   using esphome::modbus_controller::ModbusCommandItem;
   using esphome::web_server_base::global_web_server_base;
 
@@ -80,11 +80,6 @@ inline void register_routes(esphome::modbus_controller::ModbusController *ctrl,
     publish_result_(result, "Modbus WebGUI route registration failed: web server not ready");
     return;
   }
-
-  // The user-triggered read/write commands must not be swallowed by ESPHome's
-  // duplicate-command coalescing when the normal polling queue already contains
-  // the same register.
-  ctrl->set_allow_duplicate_commands(true);
 
   // Register through WebServerBase instead of AsyncWebServer::on() so these
   // custom endpoints inherit ESPHome's optional web_server auth middleware.
@@ -123,7 +118,7 @@ inline void register_routes(esphome::modbus_controller::ModbusController *ctrl,
 
                if (is_read) {
                  const uint16_t count = is_32bit ? 2 : 1;
-                 const auto register_type = is_holding ? ModbusRegisterType::HOLDING : ModbusRegisterType::READ;
+                 const auto register_type = is_holding ? EntityType::HOLDING : EntityType::INPUT_REGISTER;
 
                  char queued[128];
                  snprintf(queued, sizeof(queued), "Queued read %u-bit %s register %u",
@@ -132,8 +127,8 @@ inline void register_routes(esphome::modbus_controller::ModbusController *ctrl,
 
                  ctrl->queue_command(ModbusCommandItem::create_read_command(
                      ctrl, register_type, reg, count,
-                     [result, reg, count, is_holding](ModbusRegisterType register_type, uint16_t start_address,
-                                                      const std::vector<uint8_t> &data) {
+                     [result, reg, count, is_holding](EntityType register_type, uint16_t start_address,
+                                                      std::span<const uint8_t> data) {
                        char msg[192];
                        if (data.size() < count * 2) {
                          snprintf(msg, sizeof(msg),
@@ -179,8 +174,8 @@ inline void register_routes(esphome::modbus_controller::ModbusController *ctrl,
                publish_result_(result, queued);
 
                auto cmd = ModbusCommandItem::create_write_single_command(ctrl, reg, val);
-               cmd.on_data_func = [result, reg, val](ModbusRegisterType register_type, uint16_t start_address,
-                                                     const std::vector<uint8_t> &data) {
+               cmd.on_data_func = [result, reg, val](EntityType register_type, uint16_t start_address,
+                                                     std::span<const uint8_t> data) {
                  char msg[192];
                  if (data.size() >= 4) {
                    const uint16_t ack_reg = (static_cast<uint16_t>(data[0]) << 8) | data[1];
